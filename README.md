@@ -1,19 +1,35 @@
-🐍 8 Python projects built during my internship at Codveda Technology.
+📌 Overview
+This repository showcases a collection of Python projects categorized by difficulty level — from basic programs to advanced algorithm-based solutions.
 
 📁 Projects
-Level 1 — Basic
 
-Simple Calculator — Add, subtract, multiply, divide
-Number Guessing Game — Guess a random number in limited attempts
-Word Counter — Count words in a text file
+🔹 Level 1 — Basic
+Simple Calculator
+Number Guessing Game
+Word Counter
 
-Level 2 — Intermediate
+🔸 Level 2 — Intermediate
+To-Do List App (JSON-based storage)
+Data Scraper (headlines to CSV)
+API Integration (weather & crypto data)
 
-To-Do List App — Add, delete, complete tasks (saved to JSON)
-Data Scraper — Scrape headlines and save to CSV
-API Integration — Live weather and crypto prices
+🔺 Level 3 — Advanced
+File Encryption Tool (Fernet-based security)
+N-Queens Solver (Backtracking algorithm)
 
-Level 3 — Advanced
+⚙️ Tech Stack
+Python
+JSON / CSV
+APIs
+Web Scraping
+Cryptography
+Algorithms & Data Structures
 
-File Encryption — Encrypt and decrypt files using Fernet
-N-Queens Solver — Solve N-Queens using backtracking
+🚀 Getting Started
+Clone the repository
+Navigate to any project folder
+Run the Python file:
+python filename.py
+
+🎯 Purpose
+The goal of this repository is to strengthen programming fundamentals, explore real-world applications, and improve problem-solving skills through hands-on projects.
