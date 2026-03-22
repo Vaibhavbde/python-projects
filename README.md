@@ -1,4 +1,4 @@
-🐍 8 Python projects built during my internship at Codveda Technology.
+
 
 📁 Projects
 Level 1 — Basic
