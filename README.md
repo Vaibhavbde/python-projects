@@ -1,13 +1,31 @@
+📌 Overview
+
+This repository showcases a collection of Python projects categorized by difficulty level — from basic programs to advanced algorithm-based solutions.
 
 📁 Projects
 🔹 Level 1 — Basic
-Simple Calculator — Performs addition, subtraction, multiplication, and division
-Number Guessing Game — Interactive game with limited attempts to guess a random number
-Word Counter — Counts words from a text file efficiently
+Simple Calculator
+Number Guessing Game
+Word Counter
 🔸 Level 2 — Intermediate
-To-Do List App — Manage tasks (add, delete, mark complete) with JSON-based storage
-Data Scraper — Extracts headlines from websites and saves them to CSV
-API Integration — Fetches live data such as weather updates and cryptocurrency prices
+To-Do List App (JSON-based storage)
+Data Scraper (headlines to CSV)
+API Integration (weather & crypto data)
 🔺 Level 3 — Advanced
-File Encryption Tool — Secure file encryption and decryption using Fernet
-N-Queens Solver — Solves the N-Queens problem using backtracking algorithms
+File Encryption Tool (Fernet-based security)
+N-Queens Solver (Backtracking algorithm)
+⚙️ Tech Stack
+Python
+JSON / CSV
+APIs
+Web Scraping
+Cryptography
+Algorithms & Data Structures
+🚀 Getting Started
+Clone the repository
+Navigate to any project folder
+Run the Python file:
+python filename.py
+🎯 Purpose
+
+The goal of this repository is to strengthen programming fundamentals, explore real-world applications, and improve problem-solving skills through hands-on projects.
