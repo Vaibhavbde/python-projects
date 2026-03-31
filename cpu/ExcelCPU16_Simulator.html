@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excel-CPU16 Simulator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --panel: #0d1117;
+    --border: #1e2a38;
+    --accent: #00e5ff;
+    --accent2: #ff6b35;
+    --accent3: #7cfc00;
+    --dim: #2a3a4a;
+    --text: #c9d1d9;
+    --text-dim: #6e7681;
+    --red: #ff4444;
+    --yellow: #ffd700;
+    --glow: 0 0 12px #00e5ff66;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* scanline overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  header h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: var(--glow);
+    letter-spacing: 2px;
+  }
+
+  header h1 span { color: var(--accent2); }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-left: auto;
+    align-items: center;
+  }
+
+  button {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    background: var(--dim);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  button:hover { border-color: var(--accent); color: var(--accent); box-shadow: var(--glow); }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+  button.primary:hover { background: var(--accent); color: var(--bg); }
+  button.danger { border-color: var(--red); color: var(--red); }
+  button.danger:hover { background: var(--red); color: var(--bg); }
+  button.success { border-color: var(--accent3); color: var(--accent3); }
+  button.success:hover { background: var(--accent3); color: var(--bg); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .speed-label { color: var(--text-dim); font-size: 11px; }
+  input[type=range] { accent-color: var(--accent); width: 80px; }
+
+  .main-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: 1fr;
+    height: calc(100vh - 57px);
+  }
+
+  .left-panel {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+  }
+
+  /* TABS */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .tab {
+    padding: 8px 18px;
+    cursor: pointer;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-content { display: none; overflow: hidden; }
+  .tab-content.active { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* EDITOR */
+  .editor-wrap {
+    display: flex;
+    overflow: hidden;
+    flex: 1;
+  }
+  .line-nums {
+    background: var(--panel);
+    padding: 8px 6px 8px 10px;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.6;
+    text-align: right;
+    user-select: none;
+    min-width: 38px;
+    overflow: hidden;
+  }
+  #editor {
+    flex: 1;
+    background: #0a0e14;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 8px 12px;
+    border: none;
+    outline: none;
+    resize: none;
+    tab-size: 4;
+    overflow-y: auto;
+    white-space: pre;
+  }
+
+  .editor-status {
+    padding: 4px 12px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+  .status-ok { color: var(--accent3); }
+  .status-err { color: var(--red); }
+
+  /* DISASSEMBLY */
+  .disasm-wrap {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+  .disasm-row {
+    display: flex;
+    gap: 0;
+    padding: 1px 0;
+    transition: background 0.1s;
+  }
+  .disasm-row:hover { background: #ffffff08; }
+  .disasm-row.current { background: #00e5ff15; }
+  .disasm-row.breakpoint { background: #ff444420; }
+  .disasm-addr { color: var(--accent); width: 52px; padding: 0 8px; flex-shrink: 0; }
+  .disasm-hex { color: var(--yellow); width: 58px; flex-shrink: 0; }
+  .disasm-mnem { color: #fff; width: 70px; flex-shrink: 0; }
+  .disasm-ops { color: var(--accent2); flex: 1; }
+  .disasm-bp { width: 14px; flex-shrink: 0; color: var(--red); cursor: pointer; }
+
+  /* RIGHT PANEL */
+  .right-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--panel);
+  }
+
+  .section {
+    border-bottom: 1px solid var(--border);
+    padding: 8px 12px;
+  }
+  .section-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  /* Registers */
+  .reg-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+  .reg-cell {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px 6px;
+    text-align: center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .reg-cell.changed { border-color: var(--accent2); box-shadow: 0 0 8px #ff6b3566; animation: flash 0.4s; }
+  @keyframes flash { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .reg-label { font-size: 9px; color: var(--text-dim); }
+  .reg-value { font-size: 13px; color: var(--accent); font-weight: bold; }
+
+  /* Flags */
+  .flags-row { display: flex; gap: 10px; }
+  .flag-cell {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    text-align: center;
+    min-width: 50px;
+  }
+  .flag-label { font-size: 9px; color: var(--text-dim); }
+  .flag-value { font-size: 16px; font-weight: bold; }
+  .flag-value.on { color: var(--accent3); text-shadow: 0 0 8px var(--accent3); }
+  .flag-value.off { color: var(--dim); }
+
+  /* PC/SP */
+  .pc-row { display: flex; gap: 10px; }
+  .pc-cell { flex: 1; background: var(--bg); border: 1px solid var(--border); padding: 4px 8px; }
+  .pc-label { font-size: 9px; color: var(--text-dim); }
+  .pc-value { font-size: 14px; color: var(--yellow); font-family: 'Orbitron', monospace; }
+
+  /* Screen */
+  .screen-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 8px;
+    background: #050709;
+  }
+
+  #screen-canvas {
+    image-rendering: pixelated;
+    border: 1px solid var(--border);
+    box-shadow: 0 0 20px #00e5ff22;
+  }
+
+  .screen-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-top: 6px;
+  }
+
+  /* Log */
+  .log-wrap {
+    height: 90px;
+    overflow-y: auto;
+    font-size: 11px;
+    padding: 4px 12px;
+    background: #050709;
+    border-top: 1px solid var(--border);
+  }
+  .log-line { line-height: 1.5; }
+  .log-line.info { color: var(--text-dim); }
+  .log-line.ok { color: var(--accent3); }
+  .log-line.err { color: var(--red); }
+  .log-line.warn { color: var(--yellow); }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  /* MEMORY VIEW */
+  .mem-wrap { flex: 1; overflow: auto; font-size: 11px; padding: 4px; }
+  .mem-row { display: flex; gap: 0; line-height: 1.7; }
+  .mem-addr-lbl { color: var(--accent); width: 52px; flex-shrink: 0; }
+  .mem-cell {
+    width: 38px;
+    text-align: center;
+    flex-shrink: 0;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: color 0.1s;
+  }
+  .mem-cell:hover { color: var(--accent); }
+  .mem-cell.nonzero { color: var(--text); }
+  .mem-cell.changed { color: var(--accent2); animation: flash 0.4s; }
+
+  .running-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    display: inline-block;
+    margin-right: 6px;
+  }
+  .running-dot.active { background: var(--accent3); box-shadow: 0 0 6px var(--accent3); animation: blink 0.5s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>EXCEL<span>-</span>CPU16 <span style="font-size:11px;color:var(--text-dim);font-family:Share Tech Mono">SIMULATOR</span></h1>
+  <div class="controls">
+    <span class="running-dot" id="run-dot"></span>
+    <button class="success" id="btn-compile" onclick="compileAndLoad()">▶ Compile</button>
+    <button class="primary" id="btn-run" onclick="toggleRun()" disabled>⏵ Run</button>
+    <button id="btn-step" onclick="step()" disabled>⏭ Step</button>
+    <button class="danger" id="btn-reset" onclick="resetCPU()" disabled>↺ Reset</button>
+    <span class="speed-label">Speed:</span>
+    <input type="range" id="speed" min="1" max="6" value="3" oninput="updateSpeed()">
+    <span id="speed-label" style="color:var(--accent);font-size:11px;min-width:50px">~100Hz</span>
+  </div>
+</header>
+
+<div class="main-layout">
+  <!-- LEFT: editor + disasm -->
+  <div class="left-panel">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('editor',this)">ASM Editor</div>
+      <div class="tab" onclick="switchTab('disasm',this)">Disassembly</div>
+      <div class="tab" onclick="switchTab('memory',this)">Memory</div>
+    </div>
+
+    <div class="tab-content active" id="tab-editor">
+      <div class="editor-wrap">
+        <div class="line-nums" id="line-nums">1</div>
+        <textarea id="editor" spellcheck="false" oninput="updateLineNums();editorChanged()" onkeydown="handleTab(event)" onscroll="syncScroll()"></textarea>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-disasm">
+      <div class="disasm-wrap" id="disasm-list"></div>
+    </div>
+
+    <div class="tab-content" id="tab-memory">
+      <div class="mem-wrap" id="mem-view"></div>
+    </div>
+
+    <div class="editor-status">
+      <span id="compile-status">Ready</span>
+      <span style="margin-left:auto" id="pc-status">PC: 0x0000</span>
+      <span id="cycle-count">Cycles: 0</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: registers + screen -->
+  <div class="right-panel">
+    <div class="section">
+      <div class="section-title">Registers</div>
+      <div class="reg-grid" id="reg-grid"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Flags &amp; PC</div>
+      <div class="flags-row" id="flags-row">
+        <div class="flag-cell"><div class="flag-label">ZERO</div><div class="flag-value off" id="f-zero">0</div></div>
+        <div class="flag-cell"><div class="flag-label">CARRY</div><div class="flag-value off" id="f-carry">0</div></div>
+      </div>
+      <div class="pc-row" style="margin-top:6px">
+        <div class="pc-cell"><div class="pc-label">PC</div><div class="pc-value" id="pc-val">0000</div></div>
+        <div class="pc-cell"><div class="pc-label">Cycles</div><div class="pc-value" id="cycle-val">0</div></div>
+      </div>
+    </div>
+
+    <div class="screen-wrap">
+      <div class="section-title" style="align-self:flex-start;padding-left:4px">Display (32×32)</div>
+      <canvas id="screen-canvas" width="32" height="32" style="width:256px;height:256px"></canvas>
+      <div class="screen-label">VRAM @ 0xF000</div>
+    </div>
+
+    <div class="log-wrap" id="log-wrap"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  EXCEL-CPU16 SIMULATOR
+//  16-bit CPU with 65536 word address space
+//  Screen at 0xF000 (32x32 = 1024 pixels, each 16-bit colour)
+// ============================================================
+
+const SCREEN_BASE = 0xF000;
+const SCREEN_W = 32;
+const SCREEN_H = 32;
+const MEM_SIZE = 65536;
+
+// ---- CPU STATE ----
+let RAM = new Uint16Array(MEM_SIZE);   // main memory (also ROM)
+let REG = new Uint16Array(16);         // R0-R15
+let PC = 0;
+let flagZ = 0, flagC = 0;
+let cycles = 0;
+let running = false;
+let runInterval = null;
+let compiled = false;
+let breakpoints = new Set();
+let prevReg = new Uint16Array(16);
+let prevRAM = new Uint16Array(MEM_SIZE);
+let changedCells = new Set();
+let stepsPerTick = 1;
+const SPEEDS = [1, 5, 20, 100, 500, 2000];
+const SPEED_LABELS = ['1 Hz','5 Hz','20 Hz','~100 Hz','500 Hz','2k Hz'];
+
+// ---- CANVAS ----
+const canvas = document.getElementById('screen-canvas');
+const ctx = canvas.getContext('2d');
+
+// ---- COMPILER DATA ----
+let romWords = [];   // compiled words
+
+// ============================================================
+//  ASSEMBLER (full reimplementation of compileExcelASM16.py)
+// ============================================================
+function assemble(src) {
+  let data = [];       // [ [label, value] ]
+  let program = [];    // [ [label, [words]] ]
+  let labelOpen = false;
+  let labelToUse = '';
+  let errors = [];
+
+  function getCurrentAddress() {
+    let addr = data.length;
+    for (let op of program) addr += op[1].length;
+    return addr;
+  }
+
+  function getLocationOfLabel(name) {
+    let loc = 0;
+    for (let v of data) {
+      if (v[0] === name) return -2; // is a var, not a label
+      loc++;
+    }
+    for (let op of program) {
+      if (op[0] === name) return loc;
+      loc += op[1].length;
+    }
+    return -1;
+  }
+
+  function getVarIndex(name) {
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][0] === name) return i;
+    }
+    return -1;
+  }
+
+  function parseNumber(s, lineNum, deferred) {
+    let prefix = s[0];
+    let rest = s.slice(1);
+    if (prefix === '$' || prefix === '@') {
+      let v = parseInt(rest, 16);
+      if (isNaN(v) || v > 65535) throw `Integer out of range at line ${lineNum}`;
+      return v;
+    } else if (prefix === '#') {
+      let v = parseInt(rest, 10);
+      if (isNaN(v) || v > 65535) throw `Integer out of range at line ${lineNum}`;
+      return v;
+    } else if (prefix === 'R' && /^\d+$/.test(rest) && parseInt(rest) <= 15) {
+      return parseInt(rest);
+    } else {
+      // label reference
+      let loc = getLocationOfLabel(prefix + rest);
+      if (loc === -2) throw `Variable cannot be used as label: ${s}`;
+      if (loc === -1) {
+        if (deferred) return 'LABEL-' + s;
+        throw `Reference not found: ${s}`;
+      }
+      return loc;
+    }
+  }
+
+  function encode(tokens, lineNum) {
+    let op = tokens[0];
+    let tw = false;
+    let op0 = 0, op1 = 0;
+
+    if (['JMP','JEQ','JLT','JGE'].includes(op)) {
+      if (tokens.length !== 2) throw `Syntax at line ${lineNum}`;
+      tw = true;
+      const jmpOps = {JMP:0x0000, JEQ:0x0100, JLT:0x0200, JGE:0x0300};
+      op0 = jmpOps[op];
+      op1 = parseNumber(tokens[1], lineNum, true);
+    } else if (op === 'LOAD') {
+      if (tokens.length !== 3) throw `Syntax at line ${lineNum}`;
+      let varVal = getVarIndex(tokens[2]);
+      if (tokens[1][0] === 'R' && varVal !== -1) {
+        tw = true; op0 = 0x0400 + (parseNumber(tokens[1], lineNum) * 16); op1 = varVal;
+      } else if (tokens[1][0] === 'R' && tokens[2][0] === 'R') {
+        // LOAD Rx Ry => indirect: [Ry] -> Rx => opcode 0x19
+        op0 = 0x1900 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+      } else if (tokens[1][0] === 'R' && tokens[2][0] === '@') {
+        tw = true; op0 = 0x0400 + (parseNumber(tokens[1], lineNum) * 16); op1 = parseNumber(tokens[2], lineNum);
+      } else if (tokens[1][0] === 'R' && (tokens[2][0] === '$' || tokens[2][0] === '#')) {
+        tw = true; op0 = 0x0500 + (parseNumber(tokens[1], lineNum) * 16); op1 = parseNumber(tokens[2], lineNum, true);
+      } else throw `Syntax at line ${lineNum}`;
+    } else if (op === 'STORE') {
+      if (tokens.length !== 3) throw `Syntax at line ${lineNum}`;
+      if (tokens[1][0] === 'R' && tokens[2][0] === 'R') {
+        op0 = 0x0700 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+      } else if (tokens[1][0] === 'R' && tokens[2][0] === '@') {
+        tw = true; op0 = 0x0600 + (parseNumber(tokens[1], lineNum) * 16); op1 = parseNumber(tokens[2], lineNum);
+      } else throw `Syntax at line ${lineNum}`;
+    } else if (op === 'TRAN') {
+      if (tokens.length !== 3) throw `Syntax at line ${lineNum}`;
+      op0 = 0x0800 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'ADD') {
+      op0 = 0x0900 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'SUB') {
+      op0 = 0x0A00 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'MULT') {
+      op0 = 0x0B00 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'DIV') {
+      op0 = 0x0C00 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'INC') {
+      if (tokens.length !== 2) throw `Syntax at line ${lineNum}`;
+      op0 = 0x0D00 + (parseNumber(tokens[1], lineNum) * 16);
+    } else if (op === 'DEC') {
+      if (tokens.length !== 2) throw `Syntax at line ${lineNum}`;
+      op0 = 0x0E00 + (parseNumber(tokens[1], lineNum) * 16);
+    } else if (op === 'AND') {
+      op0 = 0x0F00 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'OR') {
+      op0 = 0x1000 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'XOR') {
+      op0 = 0x1100 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'NOT') {
+      if (tokens.length !== 2) throw `Syntax at line ${lineNum}`;
+      op0 = 0x1200 + (parseNumber(tokens[1], lineNum) * 16);
+    } else if (op === 'ROL') {
+      op0 = 0x1300 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'ROR') {
+      op0 = 0x1400 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'CMP') {
+      op0 = 0x1500 + (parseNumber(tokens[1], lineNum) * 16) + parseNumber(tokens[2], lineNum);
+    } else if (op === 'CLC') {
+      op0 = 0x1600;
+    } else if (op === 'STC') {
+      op0 = 0x1700;
+    } else if (op === 'NOP') {
+      op0 = 0x1800;
+    } else if (tokens.length === 3 && tokens[1] === '=') {
+      if (program.length > 0) throw `Variables must be before code, line ${lineNum}`;
+      data.push([tokens[0], tokens[2]]);
+      return null;
+    } else if (op === '.DATA') {
+      return null;
+    } else if (op === '.CODE') {
+      data.unshift(['', (data.length + 2).toString()]);
+      data.unshift(['', '0']);
+      return null;
+    } else if (op === 'ORG') {
+      if (tokens.length !== 2) throw `Syntax at line ${lineNum}`;
+      let target = parseNumber(tokens[1], lineNum);
+      let cur = getCurrentAddress();
+      if (cur > target) throw `PC exceeds ORG target, line ${lineNum}`;
+      while (cur < target) { program.push(['', [0]]); cur++; }
+      return null;
+    } else if (op === '.INC') {
+      throw `.INC not supported in browser simulator (binary includes require file access)`;
+    } else {
+      throw `Unrecognized instruction: ${op} at line ${lineNum}`;
+    }
+
+    return tw ? [op0, op1] : [op0];
+  }
+
+  // ---- First pass ----
+  let lineNum = 1;
+  let lines = src.split('\n');
+  for (let rawLine of lines) {
+    let line = rawLine.toUpperCase();
+    line = line.split(';')[0];
+    line = line.replace(/\r/g, '').trim();
+    if (!line) { lineNum++; continue; }
+
+    let labelLine = line.split(':');
+    let label = '';
+    let codePart = line;
+
+    if (line.includes(':') && labelLine[1].trim().length === 0) {
+      if (labelOpen) throw `Double label at line ${lineNum}`;
+      labelToUse = labelLine[0].trim();
+      labelOpen = true;
+      lineNum++; continue;
+    } else if (!line.includes(':')) {
+      if (labelOpen) { label = labelToUse; labelOpen = false; }
+      codePart = line;
+    } else {
+      if (labelOpen) throw `Double label at line ${lineNum}`;
+      label = labelLine[0].trim();
+      codePart = labelLine[1].trim();
+    }
+
+    let tokens = codePart.split(/\s+/).filter(Boolean);
+    if (!tokens.length) { lineNum++; continue; }
+
+    let result = encode(tokens, lineNum);
+    if (result !== null) {
+      program.push([label, result]);
+    }
+    lineNum++;
+  }
+
+  // ---- Resolve deferred labels ----
+  for (let op of program) {
+    for (let i = 0; i < op[1].length; i++) {
+      if (typeof op[1][i] === 'string' && op[1][i].startsWith('LABEL-')) {
+        let lname = op[1][i].slice(6);
+        let loc = getLocationOfLabel(lname);
+        if (loc < 0) throw `Reference not found: ${lname}`;
+        op[1][i] = loc;
+      }
+    }
+  }
+
+  // ---- Resolve data values ----
+  for (let d of data) {
+    if (d[0].length > 0 && typeof d[1] === 'string') {
+      // parse the value
+      let s = d[1];
+      let v;
+      if (s[0] === '$') v = parseInt(s.slice(1), 16);
+      else if (s[0] === '#') v = parseInt(s.slice(1), 10);
+      else v = parseInt(s);
+      d[1] = isNaN(v) ? 0 : v & 0xFFFF;
+    }
+  }
+
+  // ---- Build output ----
+  let output = [];
+  for (let d of data) output.push(typeof d[1] === 'string' ? parseInt(d[1], 16) || 0 : d[1]);
+  for (let op of program) for (let w of op[1]) output.push(w & 0xFFFF);
+
+  return { output, data, program };
+}
+
+// ============================================================
+//  DISASSEMBLER
+// ============================================================
+function disassemble(words, startAddr) {
+  let lines = [];
+  let i = startAddr;
+  while (i < words.length && i < MEM_SIZE) {
+    let w = words[i];
+    let high = (w >> 8) & 0xFF;
+    let ra = (w >> 4) & 0xF;
+    let rb = w & 0xF;
+    let mnem = '???', ops = '';
+    let twoWord = false;
+    let imm = 0;
+
+    if (high <= 0x03) {
+      twoWord = true; imm = words[i + 1] || 0;
+      const jmps = ['JMP','JEQ','JLT','JGE'];
+      mnem = jmps[high]; ops = `$${imm.toString(16).toUpperCase().padStart(4,'0')}`;
+    } else if (high >> 4 === 0x04>>4 && (high & 0xF0) === 0x40) {
+      // 0x04rx => LOAD Rx [mem]
+      twoWord = true; imm = words[i+1]||0;
+      mnem = 'LOAD'; ops = `R${ra} @$${imm.toString(16).toUpperCase().padStart(4,'0')}`;
+    } else if ((high & 0xF0) === 0x50) {
+      twoWord = true; imm = words[i+1]||0;
+      mnem = 'LOAD'; ops = `R${ra} #$${imm.toString(16).toUpperCase().padStart(4,'0')}`;
+    } else if ((high & 0xF0) === 0x60) {
+      twoWord = true; imm = words[i+1]||0;
+      mnem = 'STORE'; ops = `R${ra} @$${imm.toString(16).toUpperCase().padStart(4,'0')}`;
+    } else if ((high & 0xF0) === 0x70) {
+      mnem = 'STORE'; ops = `R${ra} R${rb}`;
+    } else if ((high & 0xF0) === 0x80) {
+      mnem = 'TRAN'; ops = `R${ra} R${rb}`;
+    } else if ((high & 0xF0) === 0x90) {
+      mnem = 'ADD'; ops = `R${ra} R${rb}`;
+    } else if ((high & 0xF0) === 0xA0) {
+      mnem = 'SUB'; ops = `R${ra} R${rb}`;
+    } else if ((high & 0xF0) === 0xB0) {
+      mnem = 'MULT'; ops = `R${ra} R${rb}`;
+    } else if ((high & 0xF0) === 0xC0) {
+      mnem = 'DIV'; ops = `R${ra} R${rb}`;
+    } else if ((high & 0xF0) === 0xD0) {
+      mnem = 'INC'; ops = `R${ra}`;
+    } else if ((high & 0xF0) === 0xE0) {
+      mnem = 'DEC'; ops = `R${ra}`;
+    } else if ((high & 0xF0) === 0xF0) {
+      mnem = 'AND'; ops = `R${ra} R${rb}`;
+    } else if (w >= 0x1000 && w <= 0x10FF) {
+      mnem = 'OR'; ops = `R${ra} R${rb}`;
+    } else if (w >= 0x1100 && w <= 0x11FF) {
+      mnem = 'XOR'; ops = `R${ra} R${rb}`;
+    } else if (w >= 0x1200 && w <= 0x12FF) {
+      mnem = 'NOT'; ops = `R${ra}`;
+    } else if (w >= 0x1300 && w <= 0x13FF) {
+      mnem = 'ROL'; ops = `R${ra} ${rb}`;
+    } else if (w >= 0x1400 && w <= 0x14FF) {
+      mnem = 'ROR'; ops = `R${ra} ${rb}`;
+    } else if (w >= 0x1500 && w <= 0x15FF) {
+      mnem = 'CMP'; ops = `R${ra} R${rb}`;
+    } else if (w === 0x1600) {
+      mnem = 'CLC'; ops = '';
+    } else if (w === 0x1700) {
+      mnem = 'STC'; ops = '';
+    } else if (w === 0x1800) {
+      mnem = 'NOP'; ops = '';
+    } else if (w >= 0x1900 && w <= 0x19FF) {
+      mnem = 'LOAD'; ops = `R${ra} R${rb}`;
+    } else if (w === 0) {
+      mnem = 'NOP'; ops = '';
+    }
+
+    // Fix the 0x04xx / 0x05xx detection properly
+    const cat = (w >> 12) & 0xF;
+    const sub = (w >> 8) & 0xF;
+    if (cat === 0) {
+      if (sub <= 3) { /* handled above */ }
+      else if (sub === 4) { twoWord=true; imm=words[i+1]||0; mnem='LOAD'; ops=`R${ra} @$${imm.toString(16).toUpperCase().padStart(4,'0')}`; }
+      else if (sub === 5) { twoWord=true; imm=words[i+1]||0; mnem='LOAD'; ops=`R${ra} #$${imm.toString(16).toUpperCase().padStart(4,'0')}`; }
+      else if (sub === 6) { twoWord=true; imm=words[i+1]||0; mnem='STORE'; ops=`R${ra} @$${imm.toString(16).toUpperCase().padStart(4,'0')}`; }
+      else if (sub === 7) { mnem='STORE'; ops=`R${ra} R${rb}`; }
+      else if (sub === 8) { mnem='TRAN'; ops=`R${ra} R${rb}`; }
+      else if (sub === 9) { mnem='ADD'; ops=`R${ra} R${rb}`; }
+      else if (sub === 0xA) { mnem='SUB'; ops=`R${ra} R${rb}`; }
+      else if (sub === 0xB) { mnem='MULT'; ops=`R${ra} R${rb}`; }
+      else if (sub === 0xC) { mnem='DIV'; ops=`R${ra} R${rb}`; }
+      else if (sub === 0xD) { mnem='INC'; ops=`R${ra}`; }
+      else if (sub === 0xE) { mnem='DEC'; ops=`R${ra}`; }
+      else if (sub === 0xF) { mnem='AND'; ops=`R${ra} R${rb}`; }
+    } else if (cat === 1) {
+      if (sub === 0) { mnem='OR'; ops=`R${ra} R${rb}`; }
+      else if (sub === 1) { mnem='XOR'; ops=`R${ra} R${rb}`; }
+      else if (sub === 2) { mnem='NOT'; ops=`R${ra}`; }
+      else if (sub === 3) { mnem='ROL'; ops=`R${ra} ${rb}`; }
+      else if (sub === 4) { mnem='ROR'; ops=`R${ra} ${rb}`; }
+      else if (sub === 5) { mnem='CMP'; ops=`R${ra} R${rb}`; }
+      else if (sub === 6) { mnem='CLC'; ops=''; }
+      else if (sub === 7) { mnem='STC'; ops=''; }
+      else if (sub === 8) { mnem='NOP'; ops=''; }
+      else if (sub === 9) { mnem='LOAD'; ops=`R${ra} R${rb}`; }
+    }
+
+    lines.push({ addr: i, word: w, mnem, ops, twoWord });
+    i += twoWord ? 2 : 1;
+    if (lines.length > 512) break;
+  }
+  return lines;
+}
+
+// ============================================================
+//  CPU EXECUTION ENGINE
+// ============================================================
+function executeOne() {
+  if (PC >= MEM_SIZE) { log('PC out of bounds, halting', 'err'); stopRun(); return; }
+
+  let w = RAM[PC];
+  let cat = (w >> 12) & 0xF;
+  let sub = (w >> 8) & 0xF;
+  let ra  = (w >> 4) & 0xF;
+  let rb  =  w & 0xF;
+
+  prevReg.set(REG);
+  let nextPC = PC + 1;
+
+  function r16(v) { return v & 0xFFFF; }
+  function setZ(v) { flagZ = (v & 0xFFFF) === 0 ? 1 : 0; }
+  function setC(v) { flagC = v > 0xFFFF ? 1 : (v < 0 ? 1 : 0); }
+
+  if (cat === 0) {
+    if (sub <= 3) {
+      // JMP family — 2-word
+      let imm = RAM[PC + 1] || 0;
+      nextPC = PC + 2;
+      let doJump = false;
+      if (sub === 0) doJump = true;                       // JMP
+      else if (sub === 1) doJump = flagZ === 1;           // JEQ
+      else if (sub === 2) doJump = flagC === 0;           // JLT
+      else if (sub === 3) doJump = flagC === 1 || flagZ===1; // JGE
+      if (doJump) nextPC = imm;
+    } else if (sub === 4) {
+      // LOAD Rx [mem] — 2-word
+      let addr = RAM[PC + 1] || 0;
+      REG[ra] = RAM[addr];
+      nextPC = PC + 2;
+    } else if (sub === 5) {
+      // LOAD Rx #imm — 2-word
+      REG[ra] = RAM[PC + 1] || 0;
+      nextPC = PC + 2;
+    } else if (sub === 6) {
+      // STORE Rx [mem] — 2-word
+      let addr = RAM[PC + 1] || 0;
+      writeRAM(addr, REG[ra]);
+      nextPC = PC + 2;
+    } else if (sub === 7) {
+      // STORE Ra [Rb]
+      writeRAM(REG[rb], REG[ra]);
+    } else if (sub === 8) {
+      // TRAN Ra Rb
+      REG[rb] = REG[ra];
+    } else if (sub === 9) {
+      // ADD Ra Rb
+      let res = REG[ra] + REG[rb] + flagC;
+      setC(res); REG[ra] = r16(res); setZ(REG[ra]);
+    } else if (sub === 0xA) {
+      // SUB Ra Rb
+      let res = REG[ra] - REG[rb] - flagC;
+      flagC = res < 0 ? 0 : 1; REG[ra] = r16(res); setZ(REG[ra]);
+    } else if (sub === 0xB) {
+      // MULT Ra Rb => low in Ra, high in Rb
+      let res = REG[ra] * REG[rb];
+      REG[ra] = r16(res); REG[rb] = r16(res >> 16);
+    } else if (sub === 0xC) {
+      // DIV Ra Rb => quotient in Ra, mod in Rb
+      if (REG[rb] === 0) { log('Division by zero!', 'warn'); }
+      else { let q = Math.floor(REG[ra] / REG[rb]); let m = REG[ra] % REG[rb]; REG[ra] = r16(q); REG[rb] = r16(m); }
+    } else if (sub === 0xD) {
+      REG[ra] = r16(REG[ra] + 1);  // INC (no flags)
+    } else if (sub === 0xE) {
+      REG[ra] = r16(REG[ra] - 1);  // DEC (no flags)
+    } else if (sub === 0xF) {
+      REG[ra] = r16(REG[ra] & REG[rb]); setZ(REG[ra]);
+    }
+  } else if (cat === 1) {
+    if (sub === 0) {
+      REG[ra] = r16(REG[ra] | REG[rb]); setZ(REG[ra]);
+    } else if (sub === 1) {
+      REG[ra] = r16(REG[ra] ^ REG[rb]); setZ(REG[ra]);
+    } else if (sub === 2) {
+      REG[ra] = r16(~REG[ra]); setZ(REG[ra]);
+    } else if (sub === 3) {
+      // ROL Ra, n
+      let n = rb & 15;
+      REG[ra] = r16((REG[ra] << n) | (REG[ra] >> (16-n)));
+    } else if (sub === 4) {
+      // ROR Ra, n
+      let n = rb & 15;
+      REG[ra] = r16((REG[ra] >> n) | (REG[ra] << (16-n)));
+    } else if (sub === 5) {
+      // CMP Ra Rb
+      let res = REG[ra] - REG[rb];
+      flagC = res < 0 ? 0 : 1; flagZ = (REG[ra] === REG[rb]) ? 1 : 0;
+    } else if (sub === 6) {
+      flagC = 0;  // CLC
+    } else if (sub === 7) {
+      flagC = 1;  // STC
+    } else if (sub === 8) {
+      // NOP
+    } else if (sub === 9) {
+      // LOAD Ra Rb => [Rb] -> Ra (indirect)
+      REG[ra] = RAM[REG[rb]];
+    }
+  }
+
+  PC = nextPC & 0xFFFF;
+  cycles++;
+  updateUI();
+}
+
+function writeRAM(addr, val) {
+  addr = addr & 0xFFFF;
+  val = val & 0xFFFF;
+  RAM[addr] = val;
+  changedCells.add(addr);
+  if (addr >= SCREEN_BASE && addr < SCREEN_BASE + SCREEN_W * SCREEN_H) {
+    drawPixel(addr - SCREEN_BASE, val);
+  }
+}
+
+// ============================================================
+//  SCREEN RENDERING
+// ============================================================
+function drawPixel(idx, val) {
+  let x = idx % SCREEN_W;
+  let y = Math.floor(idx / SCREEN_W);
+  // 16-bit colour: RRRRGGGGBBBBAAAA (4 bits each)
+  let r = ((val >> 12) & 0xF) * 17;
+  let g = ((val >> 8) & 0xF) * 17;
+  let b = ((val >> 4) & 0xF) * 17;
+  let a = (val & 0xF) * 17;
+  ctx.fillStyle = `rgba(${r},${g},${b},${a/255})`;
+  ctx.fillRect(x, y, 1, 1);
+}
+
+function redrawScreen() {
+  ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+  for (let i = 0; i < SCREEN_W * SCREEN_H; i++) {
+    let val = RAM[SCREEN_BASE + i];
+    if (val !== 0) drawPixel(i, val);
+  }
+}
+
+// ============================================================
+//  UI UPDATES
+// ============================================================
+function updateUI() {
+  // Registers
+  for (let i = 0; i < 16; i++) {
+    let cell = document.getElementById('reg-' + i);
+    if (!cell) continue;
+    let v = REG[i].toString(16).toUpperCase().padStart(4, '0');
+    let vEl = cell.querySelector('.reg-value');
+    if (vEl.textContent !== v) {
+      vEl.textContent = v;
+      cell.classList.remove('changed');
+      void cell.offsetWidth;
+      cell.classList.add('changed');
+    }
+  }
+  // Flags
+  let fz = document.getElementById('f-zero');
+  let fc = document.getElementById('f-carry');
+  fz.textContent = flagZ; fz.className = 'flag-value ' + (flagZ ? 'on' : 'off');
+  fc.textContent = flagC; fc.className = 'flag-value ' + (flagC ? 'on' : 'off');
+  // PC
+  let pcHex = PC.toString(16).toUpperCase().padStart(4, '0');
+  document.getElementById('pc-val').textContent = pcHex;
+  document.getElementById('cycle-val').textContent = cycles.toLocaleString();
+  document.getElementById('pc-status').textContent = 'PC: 0x' + pcHex;
+  document.getElementById('cycle-count').textContent = 'Cycles: ' + cycles.toLocaleString();
+
+  // Highlight current disasm line
+  document.querySelectorAll('.disasm-row.current').forEach(el => el.classList.remove('current'));
+  let cur = document.querySelector(`.disasm-row[data-addr="${PC}"]`);
+  if (cur) { cur.classList.add('current'); cur.scrollIntoView({ block: 'nearest' }); }
+}
+
+function updateRegGrid() {
+  let grid = document.getElementById('reg-grid');
+  grid.innerHTML = '';
+  for (let i = 0; i < 16; i++) {
+    let cell = document.createElement('div');
+    cell.className = 'reg-cell';
+    cell.id = 'reg-' + i;
+    cell.innerHTML = `<div class="reg-label">R${i}</div><div class="reg-value">${REG[i].toString(16).toUpperCase().padStart(4,'0')}</div>`;
+    grid.appendChild(cell);
+  }
+}
+
+// ============================================================
+//  COMPILE & LOAD
+// ============================================================
+function compileAndLoad() {
+  let src = document.getElementById('editor').value;
+  let statusEl = document.getElementById('compile-status');
+  try {
+    let result = assemble(src);
+    romWords = result.output;
+    RAM.fill(0);
+    for (let i = 0; i < romWords.length; i++) RAM[i] = romWords[i];
+    compiled = true;
+    PC = 0; cycles = 0; REG.fill(0); flagZ = 0; flagC = 0;
+    redrawScreen();
+    updateRegGrid();
+    updateUI();
+    buildDisasm();
+    buildMemView();
+    statusEl.innerHTML = `<span class="status-ok">✓ Compiled — ${romWords.length} words</span>`;
+    log(`Compiled OK — ${romWords.length} words loaded into RAM`, 'ok');
+    document.getElementById('btn-run').disabled = false;
+    document.getElementById('btn-step').disabled = false;
+    document.getElementById('btn-reset').disabled = false;
+    switchTab('disasm', document.querySelectorAll('.tab')[1]);
+  } catch (e) {
+    statusEl.innerHTML = `<span class="status-err">✗ ${e}</span>`;
+    log('Compile error: ' + e, 'err');
+    compiled = false;
+  }
+}
+
+function buildDisasm() {
+  let list = document.getElementById('disasm-list');
+  list.innerHTML = '';
+  let lines = disassemble(Array.from(RAM.slice(0, Math.min(romWords.length + 10, 512))), 0);
+  for (let ln of lines) {
+    let row = document.createElement('div');
+    row.className = 'disasm-row';
+    row.dataset.addr = ln.addr;
+    let hexStr = ln.word.toString(16).toUpperCase().padStart(4, '0');
+    row.innerHTML = `
+      <div class="disasm-bp" onclick="toggleBP(${ln.addr})"> </div>
+      <div class="disasm-addr">${ln.addr.toString(16).toUpperCase().padStart(4,'0')}</div>
+      <div class="disasm-hex">${hexStr}</div>
+      <div class="disasm-mnem">${ln.mnem}</div>
+      <div class="disasm-ops">${ln.ops}</div>`;
+    list.appendChild(row);
+  }
+}
+
+function buildMemView() {
+  let view = document.getElementById('mem-view');
+  view.innerHTML = '';
+  // Show first 2K words in grid of 16 per row
+  for (let row = 0; row < 128; row++) {
+    let base = row * 16;
+    let div = document.createElement('div');
+    div.className = 'mem-row';
+    div.innerHTML = `<div class="mem-addr-lbl">${base.toString(16).toUpperCase().padStart(4,'0')}</div>`;
+    for (let col = 0; col < 16; col++) {
+      let addr = base + col;
+      let v = RAM[addr];
+      let cell = document.createElement('div');
+      cell.className = 'mem-cell' + (v ? ' nonzero' : '');
+      cell.id = 'mc-' + addr;
+      cell.textContent = v.toString(16).toUpperCase().padStart(4,'0');
+      div.appendChild(cell);
+    }
+    view.appendChild(div);
+  }
+}
+
+// ============================================================
+//  RUN / STEP / RESET
+// ============================================================
+function toggleRun() {
+  if (running) stopRun();
+  else startRun();
+}
+
+function startRun() {
+  if (!compiled) return;
+  running = true;
+  document.getElementById('run-dot').classList.add('active');
+  document.getElementById('btn-run').textContent = '⏸ Pause';
+  let hz = SPEEDS[parseInt(document.getElementById('speed').value) - 1];
+  // batch execution
+  stepsPerTick = hz <= 20 ? 1 : Math.ceil(hz / 60);
+  runInterval = setInterval(() => {
+    let steps = stepsPerTick;
+    while (steps-- > 0) {
+      if (breakpoints.has(PC)) { stopRun(); log('Breakpoint hit @ 0x' + PC.toString(16).toUpperCase(), 'warn'); return; }
+      executeOne();
+    }
+    // update memory cells that changed
+    for (let addr of changedCells) {
+      let cell = document.getElementById('mc-' + addr);
+      if (cell) {
+        cell.textContent = RAM[addr].toString(16).toUpperCase().padStart(4,'0');
+        cell.className = 'mem-cell' + (RAM[addr] ? ' nonzero changed' : '');
+        setTimeout(() => { if(cell) cell.classList.remove('changed'); }, 400);
+      }
+    }
+    changedCells.clear();
+  }, 1000 / Math.min(hz, 60));
+}
+
+function stopRun() {
+  running = false;
+  clearInterval(runInterval);
+  document.getElementById('run-dot').classList.remove('active');
+  document.getElementById('btn-run').textContent = '⏵ Run';
+  updateRegGrid(); updateUI();
+}
+
+function step() {
+  if (!compiled) return;
+  stopRun();
+  executeOne();
+  for (let addr of changedCells) {
+    let cell = document.getElementById('mc-' + addr);
+    if (cell) {
+      cell.textContent = RAM[addr].toString(16).toUpperCase().padStart(4,'0');
+      cell.className = 'mem-cell nonzero changed';
+    }
+  }
+  changedCells.clear();
+}
+
+function resetCPU() {
+  stopRun();
+  PC = 0; cycles = 0; REG.fill(0); flagZ = 0; flagC = 0;
+  // reload ROM
+  RAM.fill(0);
+  for (let i = 0; i < romWords.length; i++) RAM[i] = romWords[i];
+  ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+  updateRegGrid(); updateUI(); buildMemView();
+  log('CPU reset', 'info');
+}
+
+function toggleBP(addr) {
+  if (breakpoints.has(addr)) {
+    breakpoints.delete(addr);
+    document.querySelector(`.disasm-row[data-addr="${addr}"] .disasm-bp`).textContent = ' ';
+    document.querySelector(`.disasm-row[data-addr="${addr}"]`).classList.remove('breakpoint');
+  } else {
+    breakpoints.add(addr);
+    document.querySelector(`.disasm-row[data-addr="${addr}"] .disasm-bp`).textContent = '●';
+    document.querySelector(`.disasm-row[data-addr="${addr}"]`).classList.add('breakpoint');
+  }
+}
+
+// ============================================================
+//  SPEED
+// ============================================================
+function updateSpeed() {
+  let val = parseInt(document.getElementById('speed').value);
+  document.getElementById('speed-label').textContent = SPEED_LABELS[val - 1];
+  if (running) { stopRun(); startRun(); }
+}
+
+// ============================================================
+//  LOG
+// ============================================================
+function log(msg, type = 'info') {
+  let wrap = document.getElementById('log-wrap');
+  let line = document.createElement('div');
+  line.className = 'log-line ' + type;
+  let t = new Date().toLocaleTimeString('en', { hour12: false });
+  line.textContent = `[${t}] ${msg}`;
+  wrap.appendChild(line);
+  wrap.scrollTop = wrap.scrollHeight;
+  if (wrap.children.length > 200) wrap.removeChild(wrap.children[0]);
+}
+
+// ============================================================
+//  EDITOR HELPERS
+// ============================================================
+function updateLineNums() {
+  let editor = document.getElementById('editor');
+  let lines = editor.value.split('\n').length;
+  let nums = '';
+  for (let i = 1; i <= lines; i++) nums += i + '\n';
+  document.getElementById('line-nums').textContent = nums;
+}
+
+function syncScroll() {
+  let editor = document.getElementById('editor');
+  document.getElementById('line-nums').scrollTop = editor.scrollTop;
+}
+
+function handleTab(e) {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    let ta = e.target;
+    let s = ta.selectionStart, end = ta.selectionEnd;
+    ta.value = ta.value.substring(0, s) + '\t' + ta.value.substring(end);
+    ta.selectionStart = ta.selectionEnd = s + 1;
+    updateLineNums();
+  }
+}
+
+function editorChanged() {
+  document.getElementById('compile-status').innerHTML = '<span style="color:var(--yellow)">● Modified</span>';
+}
+
+// ============================================================
+//  TABS
+// ============================================================
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+const BOUNCING_BALL_ASM = `;4x4 pixel ball bounces around the screen
+
+.DATA
+	SCREEN = $F000
+	DIRX = $0000
+	DIRY = $0000
+	COLOR = $1111
+	LOCATION = $FC81
+.CODE
+	LOAD R0 #0
+	LOAD R15 SCREEN
+	LOAD R1 #124
+	LOAD R2 COLOR
+	LOAD R3 DIRX
+	LOAD R4 DIRY
+	LOAD R5 LOCATION
+	;TMP VARS
+	LOAD R13 $20
+
+BOUNCE:
+	;DIR 0 IS --
+	;DIR 1 IS ++
+	JMP DRAWBALL
+	FROMDRAWBALL:
+	JMP MOVEBALL	
+
+DRAWBALL:
+	TRAN R5 R14
+	STORE R2 R14
+	CLC
+	ADD R14 R13
+	STORE R2 R14
+	ADD R14 R13
+	STORE R2 R14
+	ADD R14 R13
+	STORE R2 R14
+	JMP FROMDRAWBALL
+
+ERASEBALL:	
+	TRAN R5 R14
+	STORE R0 R14
+	CLC
+	ADD R14 R13
+	STORE R0 R14
+	ADD R14 R13
+	STORE R0 R14
+	ADD R14 R13
+	STORE R0 R14
+
+MOVEBALL:
+	;CHECK Y
+	TRAN R5 R14
+	LOAD R12 $0FFF
+	AND R14 R12
+	LOAD R12 $0080
+	DIV R14 R12
+	TRAN R12 R11	;KEEP X LOCATION IN R11
+		JMP YMOVE
+		AFTERYMOVE:
+	CMP R14 R0
+	JEQ SWITCHDIRY
+	LOAD R12 $001F
+	CMP R14 R12
+	JEQ SWITCHDIRY
+	
+	RESETLOCY:
+	LOAD R12 $0080
+	MULT R14 R12
+	LOAD R12 $F000
+	OR R14 R12
+	TRAN R14 R5
+	
+	JMP XMOVE
+	AFTERXMOVE:
+	CMP R11 R0
+	JEQ SWITCHDIRX
+	LOAD R12 $001F
+	CMP R11 R12
+	JEQ SWITCHDIRX
+	
+	RESETLOCX:
+	CLC
+	ADD R5 R11
+	
+	ADJUSTCOLOR:
+	LOAD R12 $1111
+	CLC
+	ADD R2 R12
+	
+	JMP BOUNCE
+
+
+YMOVE:
+	CMP R4 R0
+	JEQ YUP ; IF DIRY = 0
+		INC R14
+		JMP AFTERYMOVE
+	YUP:
+		DEC R14
+		JMP AFTERYMOVE
+		
+XMOVE:
+	CMP R3 R0
+	JEQ XLEFT ; IF DIRX = 0
+		INC R11
+		JMP AFTERXMOVE
+	XLEFT:
+		DEC R11
+		JMP AFTERXMOVE		
+		
+SWITCHDIRY:
+	LOAD R12 $0001
+	XOR R4 R12
+	JMP RESETLOCY
+	
+SWITCHDIRX:
+	LOAD R12 $0001
+	XOR R3 R12
+	JMP RESETLOCX`;
+
+const CYCLE_ASM = `.DATA
+	SCREEN = $F000
+.CODE
+	LOAD R0 SCREEN
+	LOAD R1 $0123
+	LOAD R2 $4567
+	LOAD R3 $89AB
+	LOAD R4 $CDEF
+	
+LOOP:
+	STORE R1 R0
+	INC R0
+	STORE R2 R0
+	INC R0
+	STORE R3 R0
+	INC R0
+	STORE R4 R0
+	INC R0
+	JMP LOOP`;
+
+// Preset buttons
+document.querySelector('.controls').insertAdjacentHTML('afterbegin', `
+  <select id="preset-sel" style="font-family:Share Tech Mono,monospace;font-size:11px;background:var(--dim);color:var(--text);border:1px solid var(--border);padding:5px 8px;cursor:pointer" onchange="loadPreset(this.value)">
+    <option value="">Load Example...</option>
+    <option value="ball">bouncingBall.s</option>
+    <option value="cycle">cycle.s</option>
+  </select>
+`);
+
+function loadPreset(v) {
+  if (!v) return;
+  document.getElementById('editor').value = v === 'ball' ? BOUNCING_BALL_ASM : CYCLE_ASM;
+  updateLineNums();
+  editorChanged();
+  document.getElementById('preset-sel').value = '';
+}
+
+// Init
+updateRegGrid();
+updateUI();
+document.getElementById('editor').value = BOUNCING_BALL_ASM;
+updateLineNums();
+log('Excel-CPU16 Simulator ready. Select an example or write ASM, then click Compile.', 'ok');
+log('Instruction set: JMP/JEQ/JLT/JGE LOAD STORE TRAN ADD SUB MULT DIV INC DEC AND OR XOR NOT ROL ROR CMP CLC STC NOP', 'info');
+</script>
+</body>
+</html>
